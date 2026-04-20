@@ -1,0 +1,5 @@
+{
+  "storage-driver": "fuse-overlayfs",
+  "iptables": true,
+  "bridge": "none"
+}

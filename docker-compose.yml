@@ -1,0 +1,27 @@
+services:
+  gns3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gns3:latest
+    container_name: gns3-server
+    hostname: gns3-server
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - "3080:3080"   # gns3-server REST API (desktop GNS3 client)
+      - "8080:8080"   # gns3-web-ui (browser)
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+      # Uncomment the next line if /dev/kvm is present on the host
+      # - /dev/kvm:/dev/kvm
+    volumes:
+      - gns3-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+volumes:
+  gns3-data:

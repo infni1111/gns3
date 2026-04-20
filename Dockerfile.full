@@ -1,0 +1,46 @@
+# Self-contained GNS3 server image.
+# Builds on top of gns3:latest (which already ships the compiled web UI and
+# gns3-server). Adds the tools and fixes needed for a zero-setup experience:
+#   * overlayfs-on-overlayfs fix (fuse-overlayfs + daemon.json)
+#   * unzip/7z/xz/genisoimage/ovmf/swtpm for appliance installs
+#   * pre-seeded MikroTik CHR image (baked in)
+#   * bootstrap script that, on first boot, pulls the Kali Docker image and
+#     registers both appliance templates through the GNS3 REST API
+#   * dockerd + bootstrap wired into supervisord
+
+FROM gns3:latest
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# 1. Extra tools and DinD driver ----------------------------------------------
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      unzip p7zip-full xz-utils genisoimage fuse-overlayfs \
+      qemu-system-mips qemu-system-ppc ovmf swtpm cpu-checker \
+      iputils-ping telnet socat jq less nano procps ebtables \
+      ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY daemon.json      /etc/docker/daemon.json
+
+# 2. Seed content (copied to /data on first boot, never overwrites) -----------
+RUN mkdir -p /opt/gns3-seed/images/QEMU \
+ && curl -fsSL -o /tmp/chr.zip https://download.mikrotik.com/routeros/7.22.1/chr-7.22.1.img.zip \
+ && cd /opt/gns3-seed/images/QEMU \
+ && unzip /tmp/chr.zip \
+ && rm /tmp/chr.zip \
+ && echo "a67290634f489071eae2fd99dcadba86  chr-7.22.1.img" | md5sum -c - \
+ && chown -R 1000:1000 /opt/gns3-seed
+
+# 3. Supervisor, entrypoint, bootstrap ----------------------------------------
+COPY supervisord.conf /etc/supervisor/conf.d/gns3.conf
+COPY entrypoint.sh    /usr/local/bin/entrypoint.sh
+COPY bootstrap.sh     /usr/local/bin/bootstrap.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/bootstrap.sh
+
+EXPOSE 3080 8080 5900-5920
+
+VOLUME ["/data"]
+
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-n", "-c", "/etc/supervisor/supervisord.conf"]
